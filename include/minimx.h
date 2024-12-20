@@ -8,6 +8,7 @@
 #include "pugixml.hpp"
 #include <string>
 #include <vector>
+#include <iostream>
 
 namespace minimx {
 
@@ -253,10 +254,11 @@ struct MXScore {
 inline std::string getInnerText(const pugi::xml_node& node, const std::string& tag) {
     std::string result;
     for (const auto& child : node.select_nodes(tag.c_str())) {
-        if (auto cur_node = child.node(); cur_node.type() == pugi::node_pcdata) {
-            result += cur_node.value();
-        }
+        result += child.node().text().as_string();
+        result += "\n";
     }
+    // remove the last newline character
+    if (!result.empty()) { result.pop_back(); }
     return result;
 }
 
@@ -290,8 +292,8 @@ inline Measure::Measure(const pugi::xml_node& node) {
 inline MeasureElement::MeasureElement(const pugi::xml_node& node) {
     duration = node.select_node("duration").node().text().as_int();
 
-    if (node.name() == "note") {
-        const auto tieType = node.select_node("type").node().text().as_string();
+    if (strcmp(node.name(), "note") == 0) {
+        const std::string tieType = node.select_node("type").node().text().as_string();
 
         type        = Note;
         voice       = node.select_node("voice").node().text().as_int();
@@ -309,9 +311,9 @@ inline MeasureElement::MeasureElement(const pugi::xml_node& node) {
         } else {
             tie = NotTied;
         }
-    } else if (node.name() == "backup") {
+    } else if (strcmp(node.name(), "backup") == 0) {
         type = Backup;
-    } else if (node.name() == "forward") {
+    } else if (strcmp(node.name(), "forward") == 0) {
         type = Forward;
     }
 }
