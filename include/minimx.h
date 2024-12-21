@@ -127,6 +127,10 @@ struct Pitch {
     Pitch& operator=(Pitch&&)      = default;
 
     explicit Pitch(const pugi::xml_node& doc);
+
+    bool operator==(const Pitch& other) const {
+        return alter == other.alter & octave == other.octave & step == other.step;
+    }
 };
 
 /// @brief Defines syllabic styles for lyrics.
@@ -140,8 +144,8 @@ enum Syllabic : uint8_t {
 
 /// @brief Represents a lyric associated with a note.
 struct Lyric {
-    Syllabic    syllabic;   // The syllabic type of the lyric segment.
-    std::string text;       // The lyric text.
+    Syllabic    syllabic = None;   // The syllabic type of the lyric segment.
+    std::string text;              // The lyric text.
 
     Lyric()                        = default;
     Lyric(const Lyric&)            = default;
@@ -158,10 +162,12 @@ struct MeasureElement {
     Tie                tie  = NotDefined;   // The tie status (NotTied, Start, Stop).
     bool               isChordTone{};       // True if this note is part of a chord.
     bool               isGrace{};           // True if this is a grace note.
+    bool               isRest{};            // True if this is a rest.
     int                duration{};          // The duration of the element.
     int                voice{};             // The voice number.
     int                staff{};             // The staff number.
     std::string        accidental;          // An accidental string (e.g., "#", "b").
+    std::string        noteType;            // The type of note (e.g., "16th").
     Pitch              pitch{};             // The pitch information for a note.
     Lyric              lyric{};             // The lyric associated with the note.
 
@@ -172,6 +178,8 @@ struct MeasureElement {
     MeasureElement& operator=(MeasureElement&&)      = default;
 
     explicit MeasureElement(const pugi::xml_node& node);
+
+    explicit MeasureElement(const pugi::xml_node& node, MeasureElementType type);
 };
 
 /// @brief Represents a musical measure, containing attributes and elements.
@@ -286,23 +294,31 @@ inline Measure::Measure(const pugi::xml_node& node) {
     attributes = MeasureAttributes(node);
 
     elements.reserve(16);   // pre allocate space for 16 elements, to fasten the process
-    for (const auto& child : node.children()) { elements.emplace_back(child); }
+    for (const auto& child : node.children()) {
+        if (const std::string name = child.name(); name == "note") {
+            elements.emplace_back(child, Note);
+        } else if (name == "backup") {
+            elements.emplace_back(child, Backup);
+        } else if (name == "forward") {
+            elements.emplace_back(child, Forward);
+        }
+    }
 }
 
 inline MeasureElement::MeasureElement(const pugi::xml_node& node) {
     duration = node.select_node("duration").node().text().as_int();
 
     if (strcmp(node.name(), "note") == 0) {
-        const std::string tieType = node.select_node("type").node().text().as_string();
-
-        type        = Note;
-        voice       = node.select_node("voice").node().text().as_int();
-        accidental  = node.select_node("accidental").node().text().as_string();
-        staff       = node.select_node("staff").node().text().as_int();
-        isChordTone = !node.select_node("chord").node().empty();
-        isGrace     = !node.select_node("grace").node().empty();
-        pitch       = Pitch(node);
-        lyric       = Lyric(node);
+        const std::string tieType = node.select_node("tie").node().attribute("type").as_string();
+        type                      = Note;
+        noteType                  = node.select_node("type").node().text().as_string();
+        voice                     = node.select_node("voice").node().text().as_int();
+        accidental                = node.select_node("accidental").node().text().as_string();
+        staff                     = node.select_node("staff").node().text().as_int();
+        isChordTone               = !node.select_node("chord").node().empty();
+        isGrace                   = !node.select_node("grace").node().empty();
+        pitch                     = Pitch(node);
+        lyric                     = Lyric(node);
 
         if (tieType == "start") {
             tie = Start;
@@ -317,6 +333,33 @@ inline MeasureElement::MeasureElement(const pugi::xml_node& node) {
         type = Forward;
     }
 }
+
+inline MeasureElement::MeasureElement(const pugi::xml_node& node, MeasureElementType type) :
+    type(type), duration(node.select_node("duration").node().text().as_int()) {
+    if (type == Note) {
+
+        const std::string tieType = node.select_node("tie").node().attribute("type").as_string();
+
+        noteType    = node.select_node("type").node().text().as_string();
+        voice       = node.select_node("voice").node().text().as_int();
+        accidental  = node.select_node("accidental").node().text().as_string();
+        staff       = node.select_node("staff").node().text().as_int();
+        isChordTone = node.child("chord") ? true : false;
+        isGrace     = node.child("grace") ? true : false;
+        isRest      = node.child("rest") ? true : false;
+        pitch       = Pitch(node);
+        lyric       = Lyric(node);
+
+        if (tieType == "start") {
+            tie = Start;
+        } else if (tieType == "stop") {
+            tie = Stop;
+        } else {
+            tie = NotTied;
+        }
+    }
+}
+
 
 inline Pitch::Pitch(const pugi::xml_node& doc) {
     const auto node = doc.select_node("pitch").node();
