@@ -51,10 +51,10 @@ enum TimeSymbol : uint8_t {
 struct Time {
     /// @brief The symbol used to represent the time signature.
     TimeSymbol symbol = Normal;
-    /// @brief The number of beats in each measure (e.g., 4).
-    int beats = 0;
-    /// @brief The beat type (e.g., "4" for quarter note).
-    std::string mode;
+    /// @brief the "3" in "3/4" time signature.
+    uint8_t beats = 4;
+    /// @brief the "4" in "3/4" time signature.
+    uint8_t beatType = 4;
 
     Time()                       = default;
     Time(const Time&)            = default;
@@ -175,13 +175,13 @@ struct MeasureElement {
     MeasureElementType type = Note;   // The type of measure element (Note, Backup, or Forward).
     Tie                tie  = NotDefined;   // The tie status (NotTied, Start, Stop).
     bool               isChordTone{};       // True if this note is part of a chord.
-    bool               isGrace{};           // True if this is a grace note.
+    bool               isGrace{};           // True if this is a grace note. #TODO: Implement grace notes.
     bool               isRest{};            // True if this is a rest.
-    int                duration{};          // The duration of the element.
+    uint8_t            staff{};             // The staff number, which indicates higher or lower notes.
+    uint8_t            actualNotes{1};      // The actual_notes in time_modification.
+    uint8_t            normalNotes{1};      // The normal_notes in time_modification.
     int                voice{};             // The voice number.
-    int                staff{};             // The staff number.
-    std::string        accidental;          // An accidental string (e.g., "#", "b").
-    std::string        noteType;            // The type of note (e.g., "16th").
+    int                duration{};          // The duration of the element.
     Pitch              pitch{};             // The pitch information for a note.
     Lyric              lyric{};             // The lyric associated with the note.
 
@@ -237,7 +237,7 @@ struct Encoding {
     Encoding& operator=(const Encoding&) = default;
     Encoding& operator=(Encoding&&)      = default;
 
-    explicit Encoding(const pugi::xml_node doc);
+    explicit Encoding(pugi::xml_node doc);
 };
 
 /// @brief Represents identification information for a score (composer, rights, encoding).
@@ -252,7 +252,7 @@ struct Identification {
     Identification& operator=(const Identification&) = default;
     Identification& operator=(Identification&&)      = default;
 
-    explicit Identification(const pugi::xml_node doc);
+    explicit Identification(pugi::xml_node doc);
 };
 
 struct MXScore {
@@ -339,21 +339,22 @@ inline Measure::Measure(pugi::xml_node node) {
     }
 }
 
-inline MeasureElement::MeasureElement(pugi::xml_node node) {
+inline MeasureElement::MeasureElement(const pugi::xml_node node) {
     duration = node.select_node("duration").node().text().as_int();
-
     if (strcmp(node.name(), "note") == 0) {
         const std::string tieType = node.select_node("tie").node().attribute("type").as_string();
         type                      = Note;
-        noteType                  = node.select_node("type").node().text().as_string();
         voice                     = node.select_node("voice").node().text().as_int();
-        accidental                = node.select_node("accidental").node().text().as_string();
         staff                     = node.select_node("staff").node().text().as_int();
         isChordTone               = !node.select_node("chord").node().empty();
         isGrace                   = !node.select_node("grace").node().empty();
         pitch                     = Pitch(node);
         lyric                     = Lyric(node);
 
+        if (const auto time_modification = node.select_node("time-modification").node()) {
+            actualNotes = static_cast<uint8_t>(time_modification.select_node("actual-notes").node().text().as_int());
+            normalNotes = static_cast<uint8_t>(time_modification.select_node("normal-notes").node().text().as_int());
+        }
         if (tieType == "start") {
             tie = Start;
         } else if (tieType == "stop") {
@@ -368,15 +369,13 @@ inline MeasureElement::MeasureElement(pugi::xml_node node) {
     }
 }
 
-inline MeasureElement::MeasureElement(pugi::xml_node node, MeasureElementType type) :
+inline MeasureElement::MeasureElement(const pugi::xml_node node, const MeasureElementType type) :
     type(type), duration(node.select_node("duration").node().text().as_int()) {
     if (type == Note) {
 
         const std::string tieType = node.select_node("tie").node().attribute("type").as_string();
 
-        noteType    = node.select_node("type").node().text().as_string();
         voice       = node.select_node("voice").node().text().as_int();
-        accidental  = node.select_node("accidental").node().text().as_string();
         staff       = node.select_node("staff").node().text().as_int();
         isChordTone = node.child("chord") ? true : false;
         isGrace     = node.child("grace") ? true : false;
@@ -384,6 +383,10 @@ inline MeasureElement::MeasureElement(pugi::xml_node node, MeasureElementType ty
         pitch       = isRest ? Pitch() : Pitch(node);
         lyric       = Lyric(node);
 
+        if (const auto time_modification = node.select_node("time-modification").node()) {
+            actualNotes = static_cast<uint8_t>(time_modification.select_node("actual-notes").node().text().as_int());
+            normalNotes = static_cast<uint8_t>(time_modification.select_node("normal-notes").node().text().as_int());
+        }
         if (tieType == "start") {
             tie = Start;
         } else if (tieType == "stop") {
@@ -510,7 +513,7 @@ inline Time::Time(const pugi::xml_node doc) {
     const auto node = doc.select_node("time").node();
 
     beats = node.select_node("beats").node().text().as_int();
-    mode  = node.select_node("beat-type").node().text().as_string();
+    beatType  = node.select_node("beat-type").node().text().as_int();
 
     if (const std::string symbolString = node.attribute("symbol").as_string();
         symbolString == "common") {

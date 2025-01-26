@@ -44,7 +44,7 @@ TEST_CASE("MusicXmlWithStaffValues", "minimx") {
         REQUIRE(measures[0].attributes.key.fifths == 3);
         REQUIRE(measures[0].attributes.key.mode == "major");
         REQUIRE(measures[0].attributes.time.beats == 2);
-        REQUIRE(measures[0].attributes.time.mode == "4");
+        REQUIRE(measures[0].attributes.time.beatType == 4);
         REQUIRE(measures[0].attributes.time.symbol == Normal);
     }
 
@@ -93,7 +93,6 @@ TEST_CASE("MusicXmlWithoutMeasureWidthAttribute", "minimx") {
 
     const auto& note = measure.elements[0];
     REQUIRE(note.duration == 2);
-    REQUIRE(note.noteType == "16th");
     REQUIRE(note.voice == 1);
     REQUIRE(score.parts[1].measures[0].elements[0].staff == 1);
 }
