@@ -35,7 +35,7 @@ struct Key {
     Key& operator=(const Key&) = default;
     Key& operator=(Key&&)      = default;
 
-    explicit Key(const pugi::xml_node doc);
+    explicit Key(pugi::xml_node doc);
 };
 
 enum TimeSymbol : uint8_t {
@@ -62,7 +62,7 @@ struct Time {
     Time& operator=(const Time&) = default;
     Time& operator=(Time&&)      = default;
 
-    explicit Time(const pugi::xml_node doc);
+    explicit Time(pugi::xml_node doc);
 };
 
 /// @brief Represents a clef, defined by a line on the staff and a sign (e.g., G, F, C).
@@ -78,7 +78,7 @@ struct Clef {
     Clef& operator=(const Clef&) = default;
     Clef& operator=(Clef&&)      = default;
 
-    explicit Clef(const pugi::xml_node doc);
+    explicit Clef(pugi::xml_node doc);
 };
 
 /// @brief Represents the attributes of a measure, including divisions, key, time, and clef.
@@ -98,7 +98,7 @@ struct MeasureAttributes {
     MeasureAttributes& operator=(const MeasureAttributes&) = default;
     MeasureAttributes& operator=(MeasureAttributes&&)      = default;
 
-    explicit MeasureAttributes(const pugi::xml_node doc);
+    explicit MeasureAttributes(pugi::xml_node doc);
 };
 
 /// @brief Defines the type of measure element (Note, Backup, Forward).
@@ -116,10 +116,12 @@ enum Tie : uint8_t {
     Stop,         // Tie stop.
 };
 
+
+
 /// @brief Represents the pitch of a note, including alter, octave, and step.
 struct Pitch {
-    int  alter;    // Semitone alteration relative to the natural pitch (e.g., +1 for sharp).
-    int  octave;   // The octave number.
+    int8_t  alter;    // Semitone alteration relative to the natural pitch (e.g., +1 for sharp and -1 for flat).
+    int8_t  octave;   // The octave number.
     char step;     // The note letter (A–G).
 
     Pitch()                        = default;
@@ -128,11 +130,21 @@ struct Pitch {
     Pitch& operator=(const Pitch&) = default;
     Pitch& operator=(Pitch&&)      = default;
 
-    explicit Pitch(const pugi::xml_node doc);
+    explicit Pitch(pugi::xml_node doc);
+
+    explicit Pitch(char step, int8_t alter, int8_t octave);
+
+    explicit Pitch(int midi_pitch);
+
+    [[nodiscard]] int midi_pitch() const;
 
     bool operator==(const Pitch& other) const {
         return alter == other.alter & octave == other.octave & step == other.step;
     }
+
+    void check_alter() const;
+    void check_octave() const;
+    void check_step() const;
 };
 
 /// @brief Defines syllabic styles for lyrics.
@@ -155,7 +167,7 @@ struct Lyric {
     Lyric& operator=(const Lyric&) = default;
     Lyric& operator=(Lyric&&)      = default;
 
-    explicit Lyric(const pugi::xml_node doc);
+    explicit Lyric(pugi::xml_node doc);
 };
 
 /// @brief Represents an element within a measure (e.g., a note or a time shift).
@@ -369,7 +381,7 @@ inline MeasureElement::MeasureElement(pugi::xml_node node, MeasureElementType ty
         isChordTone = node.child("chord") ? true : false;
         isGrace     = node.child("grace") ? true : false;
         isRest      = node.child("rest") ? true : false;
-        pitch       = Pitch(node);
+        pitch       = isRest ? Pitch() : Pitch(node);
         lyric       = Lyric(node);
 
         if (tieType == "start") {
@@ -387,8 +399,60 @@ inline Pitch::Pitch(const pugi::xml_node doc) {
     const auto node = doc.select_node("pitch").node();
 
     step   = node.select_node("step").node().text().as_string("\0")[0];
-    alter  = node.select_node("alter").node().text().as_int();
-    octave = node.select_node("octave").node().text().as_int();
+    alter  = static_cast<int8_t>(node.select_node("alter").node().text().as_int());
+    octave = static_cast<int8_t>(node.select_node("octave").node().text().as_int());
+
+    check_step();
+    check_alter();
+    check_octave();
+}
+
+inline Pitch::Pitch(const char step, const int8_t alter, const int8_t octave) :
+    alter(alter), octave(octave), step(step) {
+    check_step();
+    check_alter();
+    check_octave();
+}
+
+inline Pitch::Pitch(const int midi_pitch) {
+    if (midi_pitch < 0 | midi_pitch > 127) {
+        throw std::runtime_error("MiniMx: Invalid midi pitch value (" + std::to_string(midi_pitch) + ").");
+    }
+
+    octave = static_cast<int8_t>(midi_pitch / 12 - 1);
+    constexpr std::pair<char, int8_t> remainder_to_step[] = {
+        {'C', 0}, {'C', 1}, {'D', 0}, {'D', 1}, {'E', 0}, {'F', 0}, {'F', 1}, {'G', 0}, {'G', 1}, {'A', 0}, {'A', 1}, {'B', 0}
+    };
+    const auto [step, alter] = remainder_to_step[midi_pitch % 12];
+    this->step  = step;
+    this->alter = alter;
+}
+
+inline int Pitch::midi_pitch() const {
+    constexpr uint8_t step_map[] = {9, 11, 0, 2, 4, 5, 7};
+    const int pitch = static_cast<int>(octave + 1) * 12 + step_map[step - 'A'] + alter;
+    if (pitch < 0 | pitch > 127) {
+        throw std::runtime_error("MiniMx: Invalid pitch value (" + std::to_string(pitch) + ").");
+    }
+    return pitch;
+}
+
+inline void Pitch::check_step() const {
+    if (step < 'A' | step > 'G') {
+        throw std::runtime_error("MiniMx: Invalid step value in pitch (" + std::to_string(step) + ").");
+    }
+}
+
+inline void Pitch::check_alter() const {
+    if (alter < -2 | alter > 2) {
+        throw std::runtime_error("MiniMx: Invalid alter value in pitch (" + std::to_string(alter) + ").");
+    }
+}
+
+inline void Pitch::check_octave() const {
+    if (octave < 0 | octave > 9) {
+        throw std::runtime_error("MiniMx: Invalid octave value in pitch (" + std::to_string(octave) + ").");
+    }
 }
 
 inline Lyric::Lyric(const pugi::xml_node doc) {

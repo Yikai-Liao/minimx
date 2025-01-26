@@ -112,3 +112,18 @@ TEST_CASE("MusicXmlWithChords", "minimx") {
     // decimal width
     REQUIRE(score.parts[0].measures[0].width == 199.25);
 }
+
+TEST_CASE("Pitch Number", "minimx") {
+    const Pitch pitch(60);
+    REQUIRE(pitch.step == 'C');
+    REQUIRE(pitch.alter == 0);
+    REQUIRE(pitch.octave == 4);
+
+    const Pitch pitch2(61);
+    REQUIRE(pitch2.step == 'C');
+    REQUIRE(pitch2.alter == 1);
+    REQUIRE(pitch2.octave == 4);
+
+    const Pitch pitch3('A', 0, 5);
+    REQUIRE(pitch3.midi_pitch() == 81);
+}
