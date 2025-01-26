@@ -81,6 +81,28 @@ struct Clef {
     explicit Clef(pugi::xml_node doc);
 };
 
+struct Transpose {
+    int diatonic = 0;   // How step changed. -1 => D - 1 = C
+    int chromatic = 0;  // How pitch_number changed.
+    int octave_change = 0;  // How octave changed.
+    bool double_ = false;  // True if the transposition is double.
+
+    Transpose() = default;
+    Transpose(const Transpose&) = default;
+    Transpose(Transpose&&) = default;
+    Transpose& operator=(const Transpose&) = default;
+    Transpose& operator=(Transpose&&) = default;
+
+    Transpose(int diatonic, int chromatic, int octave_change, bool double_) :
+        diatonic(diatonic), chromatic(chromatic), octave_change(octave_change), double_(double_) {};
+
+    explicit Transpose(pugi::xml_node doc);
+
+    [[nodiscard]] bool empty() const {
+        return diatonic == 0 & chromatic == 0 & octave_change == 0 & !double_;
+    }
+};
+
 /// @brief Represents the attributes of a measure, including divisions, key, time, and clef.
 struct MeasureAttributes {
     /// @brief The number of divisions per quarter note, used as a metric for time.
@@ -91,6 +113,8 @@ struct MeasureAttributes {
     Time time;
     /// @brief The clef used in the measure.
     Clef clef;
+    /// @brief The transpose information.
+    Transpose transpose;
 
     MeasureAttributes()                                    = default;
     MeasureAttributes(const MeasureAttributes&)            = default;
@@ -137,6 +161,9 @@ struct Pitch {
     explicit Pitch(int midi_pitch);
 
     [[nodiscard]] int midi_pitch() const;
+
+    [[nodiscard]] int midi_pitch(const Transpose &transpose) const;
+
 
     bool operator==(const Pitch& other) const {
         return alter == other.alter & octave == other.octave & step == other.step;
@@ -440,6 +467,25 @@ inline int Pitch::midi_pitch() const {
     return pitch;
 }
 
+inline int Pitch::midi_pitch(const Transpose& transpose) const {
+    constexpr uint8_t step_map[] = {0, 2, 4, 5, 7, 9, 11};
+    int pitch = static_cast<int>(
+        octave + 1 + transpose.octave_change + (transpose.double_ ? -1 : 0)
+    ) * 12 ;
+
+    pitch += transpose.chromatic;
+    // Calculate step move (diatonic)
+    int true_step = static_cast<int>(step) - static_cast<int>('C') + transpose.diatonic;
+    if (true_step < 0) {
+        const int octave_change = (-true_step) / 7 + 1;
+        pitch -= octave_change * 12;
+        true_step += octave_change * 7;
+    }
+    pitch += step_map[true_step] + alter;
+
+    return pitch;
+}
+
 inline void Pitch::check_step() const {
     if (step < 'A' | step > 'G') {
         throw std::runtime_error("MiniMx: Invalid step value in pitch (" + std::to_string(step) + ").");
@@ -500,6 +546,7 @@ inline MeasureAttributes::MeasureAttributes(const pugi::xml_node doc) {
     key       = Key(node);
     time      = Time(node);
     clef      = Clef(node);
+    transpose = Transpose(node);
 }
 
 inline Key::Key(const pugi::xml_node doc) {
@@ -532,6 +579,15 @@ inline Clef::Clef(const pugi::xml_node doc) {
 
     line = node.select_node("line").node().text().as_int();
     sign = node.select_node("sign").node().text().as_string();
+}
+
+inline Transpose::Transpose(const pugi::xml_node doc) {
+    const auto node = doc.select_node("transpose").node();
+
+    diatonic = node.select_node("diatonic").node().text().as_int();
+    chromatic = node.select_node("chromatic").node().text().as_int();
+    octave_change = node.select_node("octave-change").node().text().as_int();
+    double_ = !node.select_node("double").node().empty();
 }
 
 }   // namespace minimx

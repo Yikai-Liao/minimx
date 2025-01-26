@@ -122,7 +122,10 @@ TEST_CASE("Pitch Number", "minimx") {
     REQUIRE(pitch2.step == 'C');
     REQUIRE(pitch2.alter == 1);
     REQUIRE(pitch2.octave == 4);
+    auto t = Transpose(-3, 1, -1, true);
+    REQUIRE(pitch2.midi_pitch(t) == 33);
 
     const Pitch pitch3('A', 0, 5);
     REQUIRE(pitch3.midi_pitch() == 81);
+
 }
