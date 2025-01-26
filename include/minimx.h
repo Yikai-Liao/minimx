@@ -103,6 +103,36 @@ struct Transpose {
     }
 };
 
+struct MidiInstrument {
+    int program = -1;  // The midi program number
+    int volume = -1;  // The volume of the measure (percentage)
+    int pan = -1;  // The pan of the measure
+
+    MidiInstrument() = default;
+    MidiInstrument(const MidiInstrument&) = default;
+    MidiInstrument(MidiInstrument&&) = default;
+    MidiInstrument& operator=(const MidiInstrument&) = default;
+    MidiInstrument& operator=(MidiInstrument&&) = default;
+
+    explicit MidiInstrument(pugi::xml_node doc);
+
+    void update(pugi::xml_node doc);
+};
+struct Sound {
+    double tempo = -1;      // The tempo of the measure
+    double dynamics = -1;   // The dynamics of the measure (percentage of velocity)
+    MidiInstrument midiInstrument;  // The midi instrument of the measure
+
+    Sound() = default;
+    Sound(const Sound&) = default;
+    Sound(Sound&&) = default;
+    Sound& operator=(const Sound&) = default;
+    Sound& operator=(Sound&&) = default;
+
+    explicit Sound(pugi::xml_node doc);
+    void update(pugi::xml_node doc);
+};
+
 /// @brief Represents the attributes of a measure, including divisions, key, time, and clef.
 struct MeasureAttributes {
     /// @brief The number of divisions per quarter note, used as a metric for time.
@@ -227,6 +257,8 @@ struct MeasureElement {
 struct Measure {
     double            width = -1.;   // Optional width of the measure.
     MeasureAttributes attributes;    // Attributes of this measure (divisions, key, time, clef).
+    Sound             sound;         // Sound information of the measure.
+
     std::vector<MeasureElement> elements;   // A list of elements (notes, forward/backups).
 
     Measure()                          = default;
@@ -242,6 +274,7 @@ struct Measure {
 struct Part {
     std::string          id;         // An identifier for the part.
     std::string          name;       // The name of the part (e.g., "Piano").
+    MidiInstrument midiInstrument;  // The midi instrument of the part.
     std::vector<Measure> measures;   // A list of measures belonging to this part.
 
     Part()                       = default;
@@ -339,9 +372,10 @@ inline void MXScore::parse_time_wise(const pugi::xml_node node) {
 }
 
 
-inline Part::Part(pugi::xml_node node) {
+inline Part::Part(const pugi::xml_node node) {
     id   = node.attribute("id").as_string();
     name = node.select_node("part-name").node().text().as_string();
+    midiInstrument = MidiInstrument(node);
 
     const std::string xpath        = "//part[@id='" + id + "']/measure";
     const auto        measureNodes = node.select_nodes(xpath.c_str());
@@ -350,9 +384,14 @@ inline Part::Part(pugi::xml_node node) {
     for (const auto& measureNode : measureNodes) { measures.emplace_back(measureNode.node()); }
 }
 
-inline Measure::Measure(pugi::xml_node node) {
+inline Measure::Measure(const pugi::xml_node node) {
     width      = node.attribute("width").as_double(-1.);
     attributes = MeasureAttributes(node);
+    sound      = Sound(node);
+
+    for (const auto direction: node.select_nodes("direction")) {
+        sound.update(direction.node());
+    }
 
     elements.reserve(16);   // pre allocate space for 16 elements, to fasten the process
     for (const auto& child : node.children()) {
@@ -588,6 +627,38 @@ inline Transpose::Transpose(const pugi::xml_node doc) {
     chromatic = node.select_node("chromatic").node().text().as_int();
     octave_change = node.select_node("octave-change").node().text().as_int();
     double_ = !node.select_node("double").node().empty();
+}
+
+inline Sound::Sound(const pugi::xml_node doc) {
+    const auto node = doc.select_node("sound").node();
+
+    tempo = node.attribute("tempo").as_double(-1.);
+    dynamics = node.attribute("dynamics").as_double(-1.);
+    midiInstrument = MidiInstrument(node);
+}
+
+inline MidiInstrument::MidiInstrument(const pugi::xml_node doc) {
+    const auto node = doc.select_node("midi-instrument").node();
+
+    program = node.select_node("midi-program").node().text().as_int(-1);
+    volume = node.select_node("volume").node().text().as_int(-1);
+    pan = node.select_node("pan").node().text().as_int(-1);
+}
+
+inline void Sound::update(const pugi::xml_node doc) {
+    const auto node = doc.select_node("sound").node();
+
+    tempo = node.attribute("tempo").as_double(tempo);
+    dynamics = node.attribute("dynamics").as_double(dynamics);
+    midiInstrument.update(node);
+}
+
+inline void MidiInstrument::update(const pugi::xml_node doc) {
+    const auto node = doc.select_node("midi-instrument").node();
+
+    program = node.select_node("midi-program").node().text().as_int(program);
+    volume = node.select_node("volume").node().text().as_int(volume);
+    pan = node.select_node("pan").node().text().as_int(pan);
 }
 
 }   // namespace minimx

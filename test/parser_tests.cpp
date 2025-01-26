@@ -32,6 +32,11 @@ TEST_CASE("MusicXmlWithStaffValues", "minimx") {
         REQUIRE(score.parts.size() == 2);
         REQUIRE(score.parts[0].id == "P1");
         REQUIRE(score.parts[0].name == "Voice");
+
+        const auto instr = score.parts[0].midiInstrument;
+        REQUIRE(instr.program == 53);
+        REQUIRE(instr.volume == 80);
+        REQUIRE(instr.pan == 0);
     }
 
     SECTION("Measures") {
@@ -110,6 +115,11 @@ TEST_CASE("MusicXmlWithChords", "minimx") {
 
     // decimal width
     REQUIRE(score.parts[0].measures[0].width == 199.25);
+
+    // Sound
+    auto sound = score.parts[0].measures[0].sound;
+    REQUIRE(sound.tempo == 54);
+    REQUIRE(sound.dynamics == 40);
 }
 
 TEST_CASE("Pitch Number", "minimx") {
