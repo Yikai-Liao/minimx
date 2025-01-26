@@ -7,6 +7,8 @@
 
 #include "pugixml.hpp"
 #include <string>
+#include <cstring>
+#include <cstdint>
 #include <vector>
 #include <iostream>
 
@@ -33,7 +35,7 @@ struct Key {
     Key& operator=(const Key&) = default;
     Key& operator=(Key&&)      = default;
 
-    explicit Key(const pugi::xml_node& doc);
+    explicit Key(const pugi::xml_node doc);
 };
 
 enum TimeSymbol : uint8_t {
@@ -60,7 +62,7 @@ struct Time {
     Time& operator=(const Time&) = default;
     Time& operator=(Time&&)      = default;
 
-    explicit Time(const pugi::xml_node& doc);
+    explicit Time(const pugi::xml_node doc);
 };
 
 /// @brief Represents a clef, defined by a line on the staff and a sign (e.g., G, F, C).
@@ -76,7 +78,7 @@ struct Clef {
     Clef& operator=(const Clef&) = default;
     Clef& operator=(Clef&&)      = default;
 
-    explicit Clef(const pugi::xml_node& doc);
+    explicit Clef(const pugi::xml_node doc);
 };
 
 /// @brief Represents the attributes of a measure, including divisions, key, time, and clef.
@@ -96,7 +98,7 @@ struct MeasureAttributes {
     MeasureAttributes& operator=(const MeasureAttributes&) = default;
     MeasureAttributes& operator=(MeasureAttributes&&)      = default;
 
-    explicit MeasureAttributes(const pugi::xml_node& doc);
+    explicit MeasureAttributes(const pugi::xml_node doc);
 };
 
 /// @brief Defines the type of measure element (Note, Backup, Forward).
@@ -126,7 +128,7 @@ struct Pitch {
     Pitch& operator=(const Pitch&) = default;
     Pitch& operator=(Pitch&&)      = default;
 
-    explicit Pitch(const pugi::xml_node& doc);
+    explicit Pitch(const pugi::xml_node doc);
 
     bool operator==(const Pitch& other) const {
         return alter == other.alter & octave == other.octave & step == other.step;
@@ -153,7 +155,7 @@ struct Lyric {
     Lyric& operator=(const Lyric&) = default;
     Lyric& operator=(Lyric&&)      = default;
 
-    explicit Lyric(const pugi::xml_node& doc);
+    explicit Lyric(const pugi::xml_node doc);
 };
 
 /// @brief Represents an element within a measure (e.g., a note or a time shift).
@@ -177,9 +179,9 @@ struct MeasureElement {
     MeasureElement& operator=(const MeasureElement&) = default;
     MeasureElement& operator=(MeasureElement&&)      = default;
 
-    explicit MeasureElement(const pugi::xml_node& node);
+    explicit MeasureElement(pugi::xml_node node);
 
-    explicit MeasureElement(const pugi::xml_node& node, MeasureElementType type);
+    explicit MeasureElement(pugi::xml_node node, MeasureElementType type);
 };
 
 /// @brief Represents a musical measure, containing attributes and elements.
@@ -194,7 +196,7 @@ struct Measure {
     Measure& operator=(const Measure&) = default;
     Measure& operator=(Measure&&)      = default;
 
-    explicit Measure(const pugi::xml_node& node);
+    explicit Measure(pugi::xml_node node);
 };
 
 /// @brief Represents a musical part, containing multiple measures.
@@ -209,7 +211,7 @@ struct Part {
     Part& operator=(const Part&) = default;
     Part& operator=(Part&&)      = default;
 
-    explicit Part(const pugi::xml_node& node);
+    explicit Part(pugi::xml_node node);
 };
 
 /// @brief Represents encoding information about the MusicXML file.
@@ -223,7 +225,7 @@ struct Encoding {
     Encoding& operator=(const Encoding&) = default;
     Encoding& operator=(Encoding&&)      = default;
 
-    explicit Encoding(const pugi::xml_node& doc);
+    explicit Encoding(const pugi::xml_node doc);
 };
 
 /// @brief Represents identification information for a score (composer, rights, encoding).
@@ -238,7 +240,7 @@ struct Identification {
     Identification& operator=(const Identification&) = default;
     Identification& operator=(Identification&&)      = default;
 
-    explicit Identification(const pugi::xml_node& doc);
+    explicit Identification(const pugi::xml_node doc);
 };
 
 struct MXScore {
@@ -253,13 +255,18 @@ struct MXScore {
     MXScore& operator=(MXScore&&)      = default;
 
     explicit MXScore(const pugi::xml_document& doc);
+
+private:
+    void parse_part_wise(pugi::xml_node node);
+    void parse_time_wise(pugi::xml_node node);
+
 };
 
 /*
  *  Parsing functions definition
  */
 
-inline std::string getInnerText(const pugi::xml_node& node, const std::string& tag) {
+inline std::string getInnerText(pugi::xml_node node, const std::string& tag) {
     std::string result;
     for (const auto& child : node.select_nodes(tag.c_str())) {
         result += child.node().text().as_string();
@@ -271,14 +278,29 @@ inline std::string getInnerText(const pugi::xml_node& node, const std::string& t
 }
 
 inline MXScore::MXScore(const pugi::xml_document& doc) {
-    movementTitle  = doc.select_node("score-partwise/movement-title").node().text().as_string();
-    identification = Identification(doc);
-    const auto partNodes = doc.select_nodes("score-partwise/part-list/score-part");
+    // check if the root node is a score-partwise or score-timewise
+    if (const auto root = doc.child("score-partwise"); root) {
+        parse_part_wise(root);
+    } else {
+        parse_time_wise(doc.child("score-timewise"));
+    }
+}
+
+inline void MXScore::parse_part_wise(const pugi::xml_node node) {
+    movementTitle  = node.select_node("movement-title").node().text().as_string();
+    identification = Identification(node);
+    const auto partNodes = node.select_nodes("part-list/score-part");
     parts.reserve(partNodes.size());
     for (const auto& partNode : partNodes) { parts.emplace_back(partNode.node()); }
 }
 
-inline Part::Part(const pugi::xml_node& node) {
+inline void MXScore::parse_time_wise(const pugi::xml_node node) {
+    // Not implemented yet
+    throw std::runtime_error("Time-wise parsing is not implemented yet.");
+}
+
+
+inline Part::Part(pugi::xml_node node) {
     id   = node.attribute("id").as_string();
     name = node.select_node("part-name").node().text().as_string();
 
@@ -289,7 +311,7 @@ inline Part::Part(const pugi::xml_node& node) {
     for (const auto& measureNode : measureNodes) { measures.emplace_back(measureNode.node()); }
 }
 
-inline Measure::Measure(const pugi::xml_node& node) {
+inline Measure::Measure(pugi::xml_node node) {
     width      = node.attribute("width").as_double(-1.);
     attributes = MeasureAttributes(node);
 
@@ -305,7 +327,7 @@ inline Measure::Measure(const pugi::xml_node& node) {
     }
 }
 
-inline MeasureElement::MeasureElement(const pugi::xml_node& node) {
+inline MeasureElement::MeasureElement(pugi::xml_node node) {
     duration = node.select_node("duration").node().text().as_int();
 
     if (strcmp(node.name(), "note") == 0) {
@@ -334,7 +356,7 @@ inline MeasureElement::MeasureElement(const pugi::xml_node& node) {
     }
 }
 
-inline MeasureElement::MeasureElement(const pugi::xml_node& node, MeasureElementType type) :
+inline MeasureElement::MeasureElement(pugi::xml_node node, MeasureElementType type) :
     type(type), duration(node.select_node("duration").node().text().as_int()) {
     if (type == Note) {
 
@@ -361,7 +383,7 @@ inline MeasureElement::MeasureElement(const pugi::xml_node& node, MeasureElement
 }
 
 
-inline Pitch::Pitch(const pugi::xml_node& doc) {
+inline Pitch::Pitch(const pugi::xml_node doc) {
     const auto node = doc.select_node("pitch").node();
 
     step   = node.select_node("step").node().text().as_string("\0")[0];
@@ -369,7 +391,7 @@ inline Pitch::Pitch(const pugi::xml_node& doc) {
     octave = node.select_node("octave").node().text().as_int();
 }
 
-inline Lyric::Lyric(const pugi::xml_node& doc) {
+inline Lyric::Lyric(const pugi::xml_node doc) {
     const auto node = doc.select_node("lyric").node();
 
     const std::string syllabicText = node.select_node("syllabic").node().text().as_string();
@@ -388,7 +410,7 @@ inline Lyric::Lyric(const pugi::xml_node& doc) {
     }
 }
 
-inline Encoding::Encoding(const pugi::xml_node& doc) {
+inline Encoding::Encoding(const pugi::xml_node doc) {
     const auto node = doc.select_node("encoding").node();
 
     software    = getInnerText(node, "software");
@@ -396,15 +418,15 @@ inline Encoding::Encoding(const pugi::xml_node& doc) {
     // Encoding Date is ignored for now
 }
 
-inline Identification::Identification(const pugi::xml_node& doc) {
-    const auto node = doc.select_node("score-partwise/identification").node();
+inline Identification::Identification(const pugi::xml_node doc) {
+    const auto node = doc.select_node("identification").node();
 
     composer = node.select_node("creator[@type='composer']").node().text().as_string();
     rights   = node.select_node("rights").node().text().as_string();
     encoding = Encoding(node);
 }
 
-inline MeasureAttributes::MeasureAttributes(const pugi::xml_node& doc) {
+inline MeasureAttributes::MeasureAttributes(const pugi::xml_node doc) {
     const auto node = doc.select_node("attributes").node();
 
     divisions = node.select_node("divisions").node().text().as_int();
@@ -413,14 +435,14 @@ inline MeasureAttributes::MeasureAttributes(const pugi::xml_node& doc) {
     clef      = Clef(node);
 }
 
-inline Key::Key(const pugi::xml_node& doc) {
+inline Key::Key(const pugi::xml_node doc) {
     const auto node = doc.select_node("key").node();
 
     fifths = node.select_node("fifths").node().text().as_int();
     mode   = node.select_node("mode").node().text().as_string();
 }
 
-inline Time::Time(const pugi::xml_node& doc) {
+inline Time::Time(const pugi::xml_node doc) {
     const auto node = doc.select_node("time").node();
 
     beats = node.select_node("beats").node().text().as_int();
@@ -438,7 +460,7 @@ inline Time::Time(const pugi::xml_node& doc) {
     }
 }
 
-inline Clef::Clef(const pugi::xml_node& doc) {
+inline Clef::Clef(const pugi::xml_node doc) {
     const auto node = doc.select_node("clef").node();
 
     line = node.select_node("line").node().text().as_int();
