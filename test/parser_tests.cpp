@@ -50,7 +50,7 @@ TEST_CASE("MusicXmlWithStaffValues", "minimx") {
         REQUIRE(measures[0].attributes.key.mode == "major");
         REQUIRE(measures[0].attributes.time.beats == 2);
         REQUIRE(measures[0].attributes.time.beatType == 4);
-        REQUIRE(measures[0].attributes.time.symbol == Normal);
+        REQUIRE(measures[0].attributes.time.symbol == TimeSymbol::Normal);
     }
 
     SECTION("Pitch") {
@@ -74,13 +74,13 @@ TEST_CASE("MusicXmlWithStaffValues", "minimx") {
 
     SECTION("Backup") {
         const auto &element = score.parts[1].measures[0].elements[1];
-        REQUIRE(element.type == Backup);
+        REQUIRE(element.type == MeasureElementType::Backup);
         REQUIRE(element.duration == 2);
     }
 
     SECTION("Forward") {
         const auto &element = score.parts[1].measures[1].elements[6];
-        REQUIRE(element.type == Forward);
+        REQUIRE(element.type == MeasureElementType::Forward);
         REQUIRE(element.duration == 8);
     }
 

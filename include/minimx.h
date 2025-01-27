@@ -38,19 +38,21 @@ struct Key {
     explicit Key(pugi::xml_node doc);
 };
 
-enum TimeSymbol : uint8_t {
+enum class TimeSymbol : uint8_t {
     Normal,
     Common,
     Cut,
     SingleNumber,
 };
 
+TimeSymbol build_time_symbol(const std::string& symbol);
+
 
 /// @brief Represents the time signature, including the number of beats per measure and the note
 /// value that represents one beat.
 struct Time {
     /// @brief The symbol used to represent the time signature.
-    TimeSymbol symbol = Normal;
+    TimeSymbol symbol = TimeSymbol::Normal;
     /// @brief the "3" in "3/4" time signature.
     uint8_t beats = 4;
     /// @brief the "4" in "3/4" time signature.
@@ -82,16 +84,16 @@ struct Clef {
 };
 
 struct Transpose {
-    int diatonic = 0;   // How step changed. -1 => D - 1 = C
-    int chromatic = 0;  // How pitch_number changed.
-    int octave_change = 0;  // How octave changed.
-    bool double_ = false;  // True if the transposition is double.
+    int  diatonic      = 0;       // How step changed. -1 => D - 1 = C
+    int  chromatic     = 0;       // How pitch_number changed.
+    int  octave_change = 0;       // How octave changed.
+    bool double_       = false;   // True if the transposition is double.
 
-    Transpose() = default;
-    Transpose(const Transpose&) = default;
-    Transpose(Transpose&&) = default;
+    Transpose()                            = default;
+    Transpose(const Transpose&)            = default;
+    Transpose(Transpose&&)                 = default;
     Transpose& operator=(const Transpose&) = default;
-    Transpose& operator=(Transpose&&) = default;
+    Transpose& operator=(Transpose&&)      = default;
 
     Transpose(int diatonic, int chromatic, int octave_change, bool double_) :
         diatonic(diatonic), chromatic(chromatic), octave_change(octave_change), double_(double_) {};
@@ -104,30 +106,30 @@ struct Transpose {
 };
 
 struct MidiInstrument {
-    int program = -1;  // The midi program number
-    int volume = -1;  // The volume of the measure (percentage)
-    int pan = -1;  // The pan of the measure
+    int program = -1;   // The midi program number
+    int volume  = -1;   // The volume of the measure (percentage)
+    int pan     = -1;   // The pan of the measure
 
-    MidiInstrument() = default;
-    MidiInstrument(const MidiInstrument&) = default;
-    MidiInstrument(MidiInstrument&&) = default;
+    MidiInstrument()                                 = default;
+    MidiInstrument(const MidiInstrument&)            = default;
+    MidiInstrument(MidiInstrument&&)                 = default;
     MidiInstrument& operator=(const MidiInstrument&) = default;
-    MidiInstrument& operator=(MidiInstrument&&) = default;
+    MidiInstrument& operator=(MidiInstrument&&)      = default;
 
     explicit MidiInstrument(pugi::xml_node doc);
 
     void update(pugi::xml_node doc);
 };
 struct Sound {
-    double tempo = -1;      // The tempo of the measure
-    double dynamics = -1;   // The dynamics of the measure (percentage of velocity)
-    MidiInstrument midiInstrument;  // The midi instrument of the measure
+    double         tempo    = -1;    // The tempo of the measure
+    double         dynamics = -1;    // The dynamics of the measure (percentage of velocity)
+    MidiInstrument midiInstrument;   // The midi instrument of the measure
 
-    Sound() = default;
-    Sound(const Sound&) = default;
-    Sound(Sound&&) = default;
+    Sound()                        = default;
+    Sound(const Sound&)            = default;
+    Sound(Sound&&)                 = default;
     Sound& operator=(const Sound&) = default;
-    Sound& operator=(Sound&&) = default;
+    Sound& operator=(Sound&&)      = default;
 
     explicit Sound(pugi::xml_node doc);
     void update(pugi::xml_node doc);
@@ -156,27 +158,33 @@ struct MeasureAttributes {
 };
 
 /// @brief Defines the type of measure element (Note, Backup, Forward).
-enum MeasureElementType : uint8_t {
+enum class MeasureElementType : uint8_t {
     Note,      // A note element.
     Backup,    // A backward movement in time (used for multiple voices).
     Forward,   // A forward movement in time.
 };
 
+MeasureElementType build_measure_element_type(const std::string& type);
+
 /// @brief Defines the type of tie (NotTied, Start, Stop).
-enum Tie : uint8_t {
+enum class Tie : uint8_t {
     NotDefined,   // Tie status not defined.
     NotTied,      // No tie applied.
     Start,        // Tie start.
     Stop,         // Tie stop.
+    StopStart,    // Tie start and then stop.
 };
+
+Tie build_tie(pugi::xml_node doc);
 
 
 
 /// @brief Represents the pitch of a note, including alter, octave, and step.
 struct Pitch {
-    int8_t  alter;    // Semitone alteration relative to the natural pitch (e.g., +1 for sharp and -1 for flat).
-    int8_t  octave;   // The octave number.
-    char step;     // The note letter (A–G).
+    int8_t alter;    // Semitone alteration relative to the natural pitch (e.g., +1 for sharp and -1
+                     // for flat).
+    int8_t octave;   // The octave number.
+    char   step;     // The note letter (A–G).
 
     Pitch()                        = default;
     Pitch(const Pitch&)            = default;
@@ -192,7 +200,7 @@ struct Pitch {
 
     [[nodiscard]] int midi_pitch() const;
 
-    [[nodiscard]] int midi_pitch(const Transpose &transpose) const;
+    [[nodiscard]] int midi_pitch(const Transpose& transpose) const;
 
 
     bool operator==(const Pitch& other) const {
@@ -213,6 +221,8 @@ enum Syllabic : uint8_t {
     Middle,
 };
 
+Syllabic build_syllabic(const std::string& syllabic);
+
 /// @brief Represents a lyric associated with a note.
 struct Lyric {
     Syllabic    syllabic = None;   // The syllabic type of the lyric segment.
@@ -229,18 +239,19 @@ struct Lyric {
 
 /// @brief Represents an element within a measure (e.g., a note or a time shift).
 struct MeasureElement {
-    MeasureElementType type = Note;   // The type of measure element (Note, Backup, or Forward).
-    Tie                tie  = NotDefined;   // The tie status (NotTied, Start, Stop).
-    bool               isChordTone{};       // True if this note is part of a chord.
-    bool               isGrace{};           // True if this is a grace note. #TODO: Implement grace notes.
-    bool               isRest{};            // True if this is a rest.
-    uint8_t            staff{};             // The staff number, which indicates higher or lower notes.
-    uint8_t            actualNotes{1};      // The actual_notes in time_modification.
-    uint8_t            normalNotes{1};      // The normal_notes in time_modification.
-    uint8_t            voice{};             // The voice number.
-    int                duration{};          // The duration of the element.
-    Pitch              pitch{};             // The pitch information for a note.
-    Lyric              lyric{};             // The lyric associated with the note.
+    MeasureElementType type
+        = MeasureElementType::Note;   // The type of measure element (Note, Backup, or Forward).
+    Tie     tie = Tie::NotDefined;    // The tie status (NotTied, Start, Stop).
+    bool    isChordTone{};            // True if this note is part of a chord.
+    bool    isGrace{};                // True if this is a grace note. #TODO: Implement grace notes.
+    bool    isRest{};                 // True if this is a rest.
+    uint8_t staff{};                  // The staff number, which indicates higher or lower notes.
+    uint8_t actualNotes{1};           // The actual_notes in time_modification.
+    uint8_t normalNotes{1};           // The normal_notes in time_modification.
+    uint8_t voice{};                  // The voice number.
+    int     duration{};               // The duration of the element.
+    Pitch   pitch{};                  // The pitch information for a note.
+    Lyric   lyric{};                  // The lyric associated with the note.
 
     MeasureElement()                                 = default;
     MeasureElement(const MeasureElement&)            = default;
@@ -272,12 +283,12 @@ struct Measure {
 
 /// @brief Represents a musical part, containing multiple measures.
 struct Part {
-    std::string          id;         // An identifier for the part.
-    std::string          name;       // The name of the part (e.g., "Piano").
-    MidiInstrument midiInstrument;  // The midi instrument of the part.
-    uint8_t staffNum = 1;  // The number of staffs in the part.
-    uint8_t voiceNum = 1;  // The number of voices in the part.
-    std::vector<Measure> measures;   // A list of measures belonging to this part.
+    std::string          id;               // An identifier for the part.
+    std::string          name;             // The name of the part (e.g., "Piano").
+    MidiInstrument       midiInstrument;   // The midi instrument of the part.
+    uint8_t              staffNum = 1;     // The number of staffs in the part.
+    uint8_t              voiceNum = 1;     // The number of voices in the part.
+    std::vector<Measure> measures;         // A list of measures belonging to this part.
 
     Part()                       = default;
     Part(const Part&)            = default;
@@ -333,7 +344,6 @@ struct MXScore {
 private:
     void parse_part_wise(pugi::xml_node node);
     void parse_time_wise(pugi::xml_node node);
-
 };
 
 /*
@@ -361,8 +371,8 @@ inline MXScore::MXScore(const pugi::xml_document& doc) {
 }
 
 inline void MXScore::parse_part_wise(const pugi::xml_node node) {
-    movementTitle  = node.select_node("movement-title").node().text().as_string();
-    identification = Identification(node);
+    movementTitle        = node.select_node("movement-title").node().text().as_string();
+    identification       = Identification(node);
     const auto partNodes = node.select_nodes("part-list/score-part");
     parts.reserve(partNodes.size());
     for (const auto& partNode : partNodes) { parts.emplace_back(partNode.node()); }
@@ -375,8 +385,8 @@ inline void MXScore::parse_time_wise(const pugi::xml_node node) {
 
 
 inline Part::Part(const pugi::xml_node node) {
-    id   = node.attribute("id").as_string();
-    name = node.select_node("part-name").node().text().as_string();
+    id             = node.attribute("id").as_string();
+    name           = node.select_node("part-name").node().text().as_string();
     midiInstrument = MidiInstrument(node);
 
     const std::string xpath        = "//part[@id='" + id + "']/measure";
@@ -385,7 +395,7 @@ inline Part::Part(const pugi::xml_node node) {
 
     for (const auto& measureNode : measureNodes) {
         measures.emplace_back(measureNode.node());
-        for (const auto &element : measures.back().elements) {
+        for (const auto& element : measures.back().elements) {
             staffNum = std::max(staffNum, element.staff);
             voiceNum = std::max(voiceNum, element.voice);
         }
@@ -397,58 +407,70 @@ inline Measure::Measure(const pugi::xml_node node) {
     attributes = MeasureAttributes(node);
     sound      = Sound(node);
 
-    for (const auto direction: node.select_nodes("direction")) {
-        sound.update(direction.node());
-    }
+    for (const auto direction : node.select_nodes("direction")) { sound.update(direction.node()); }
 
     elements.reserve(16);   // pre allocate space for 16 elements, to fasten the process
     for (const auto& child : node.children()) {
         if (const std::string name = child.name(); name == "note") {
-            elements.emplace_back(child, Note);
+            elements.emplace_back(child, MeasureElementType::Note);
         } else if (name == "backup") {
-            elements.emplace_back(child, Backup);
+            elements.emplace_back(child, MeasureElementType::Backup);
         } else if (name == "forward") {
-            elements.emplace_back(child, Forward);
+            elements.emplace_back(child, MeasureElementType::Forward);
         }
     }
 }
 
-inline MeasureElement::MeasureElement(const pugi::xml_node node) {
-    duration = node.select_node("duration").node().text().as_int();
-    if (strcmp(node.name(), "note") == 0) {
-        const std::string tieType = node.select_node("tie").node().attribute("type").as_string();
-        type                      = Note;
-        voice                     = node.select_node("voice").node().text().as_int();
-        staff                     = node.select_node("staff").node().text().as_int();
-        isChordTone               = !node.select_node("chord").node().empty();
-        isGrace                   = !node.select_node("grace").node().empty();
-        pitch                     = Pitch(node);
-        lyric                     = Lyric(node);
+inline MeasureElementType build_measure_element_type(const std::string& type) {
+    if (type == "note") {
+        return MeasureElementType::Note;
+    } else if (type == "backup") {
+        return MeasureElementType::Backup;
+    } else if (type == "forward") {
+        return MeasureElementType::Forward;
+    } else {
+        throw std::runtime_error("MiniMx: Invalid measure element type (" + type + ").");
+    }
+}
 
-        if (const auto time_modification = node.select_node("time-modification").node()) {
-            actualNotes = static_cast<uint8_t>(time_modification.select_node("actual-notes").node().text().as_int());
-            normalNotes = static_cast<uint8_t>(time_modification.select_node("normal-notes").node().text().as_int());
-        }
-        if (tieType == "start") {
-            tie = Start;
+inline Tie build_tie(const pugi::xml_node doc) {
+    switch (const auto nodes = doc.select_nodes("tie"); nodes.size()) {
+    case 0: return Tie::NotTied;
+    case 1: {
+        if (const std::string tieType = nodes[0].node().attribute("type").as_string();
+            tieType == "start") {
+            return Tie::Start;
         } else if (tieType == "stop") {
-            tie = Stop;
+            return Tie::Stop;
         } else {
-            tie = NotTied;
+            throw std::runtime_error("MiniMx: Invalid tie type (" + tieType + ").");
         }
-    } else if (strcmp(node.name(), "backup") == 0) {
-        type = Backup;
-    } else if (strcmp(node.name(), "forward") == 0) {
-        type = Forward;
+    }
+    case 2: {
+        const std::string tieType1 = nodes[0].node().attribute("type").as_string();
+        const std::string tieType2 = nodes[1].node().attribute("type").as_string();
+        if (tieType1 == "stop" & tieType2 == "start") {
+            return Tie::StopStart;
+        } else {
+            throw std::runtime_error(
+                "MiniMx: Invalid tie type (" + tieType1 + ", " + tieType2 + ")."
+            );
+        }
+    }
+    default: {
+        throw std::runtime_error("MiniMx: Invalid tie type.");
+    }
     }
 }
+
+
+inline MeasureElement::MeasureElement(const pugi::xml_node node) :
+    MeasureElement(node, build_measure_element_type(node.name())) {}
 
 inline MeasureElement::MeasureElement(const pugi::xml_node node, const MeasureElementType type) :
     type(type), duration(node.select_node("duration").node().text().as_int()) {
-    if (type == Note) {
-
-        const std::string tieType = node.select_node("tie").node().attribute("type").as_string();
-
+    if (type == MeasureElementType::Note) {
+        tie         = build_tie(node);
         voice       = node.select_node("voice").node().text().as_int();
         staff       = node.select_node("staff").node().text().as_int();
         isChordTone = node.child("chord") ? true : false;
@@ -458,16 +480,14 @@ inline MeasureElement::MeasureElement(const pugi::xml_node node, const MeasureEl
         lyric       = Lyric(node);
 
         if (const auto time_modification = node.select_node("time-modification").node()) {
-            actualNotes = static_cast<uint8_t>(time_modification.select_node("actual-notes").node().text().as_int());
-            normalNotes = static_cast<uint8_t>(time_modification.select_node("normal-notes").node().text().as_int());
+            actualNotes = static_cast<uint8_t>(
+                time_modification.select_node("actual-notes").node().text().as_int()
+            );
+            normalNotes = static_cast<uint8_t>(
+                time_modification.select_node("normal-notes").node().text().as_int()
+            );
         }
-        if (tieType == "start") {
-            tie = Start;
-        } else if (tieType == "stop") {
-            tie = Stop;
-        } else {
-            tie = NotTied;
-        }
+
     }
 }
 
@@ -493,21 +513,33 @@ inline Pitch::Pitch(const char step, const int8_t alter, const int8_t octave) :
 
 inline Pitch::Pitch(const int midi_pitch) {
     if (midi_pitch < 0 | midi_pitch > 127) {
-        throw std::runtime_error("MiniMx: Invalid midi pitch value (" + std::to_string(midi_pitch) + ").");
+        throw std::runtime_error(
+            "MiniMx: Invalid midi pitch value (" + std::to_string(midi_pitch) + ")."
+        );
     }
 
     octave = static_cast<int8_t>(midi_pitch / 12 - 1);
-    constexpr std::pair<char, int8_t> remainder_to_step[] = {
-        {'C', 0}, {'C', 1}, {'D', 0}, {'D', 1}, {'E', 0}, {'F', 0}, {'F', 1}, {'G', 0}, {'G', 1}, {'A', 0}, {'A', 1}, {'B', 0}
-    };
+    constexpr std::pair<char, int8_t> remainder_to_step[]
+        = {{'C', 0},
+           {'C', 1},
+           {'D', 0},
+           {'D', 1},
+           {'E', 0},
+           {'F', 0},
+           {'F', 1},
+           {'G', 0},
+           {'G', 1},
+           {'A', 0},
+           {'A', 1},
+           {'B', 0}};
     const auto [step, alter] = remainder_to_step[midi_pitch % 12];
-    this->step  = step;
-    this->alter = alter;
+    this->step               = step;
+    this->alter              = alter;
 }
 
 inline int Pitch::midi_pitch() const {
     constexpr uint8_t step_map[] = {9, 11, 0, 2, 4, 5, 7};
-    const int pitch = static_cast<int>(octave + 1) * 12 + step_map[step - 'A'] + alter;
+    const int         pitch      = static_cast<int>(octave + 1) * 12 + step_map[step - 'A'] + alter;
     if (pitch < 0 | pitch > 127) {
         throw std::runtime_error("MiniMx: Invalid pitch value (" + std::to_string(pitch) + ").");
     }
@@ -515,11 +547,11 @@ inline int Pitch::midi_pitch() const {
 }
 
 inline int Pitch::midi_pitch(const Transpose& transpose) const {
-    constexpr int8_t step2idx[] = {5, 6, 0, 1, 2, 3, 4};
+    constexpr int8_t step2idx[]  = {5, 6, 0, 1, 2, 3, 4};
     constexpr int8_t idx2value[] = {0, 2, 4, 5, 7, 9, 11};
-    int pitch = static_cast<int>(
-        octave + 1 + transpose.octave_change + (transpose.double_ ? -1 : 0)
-    ) * 12 ;
+    int              pitch
+        = static_cast<int>(octave + 1 + transpose.octave_change + (transpose.double_ ? -1 : 0))
+          * 12;
     int idx = static_cast<int>(step2idx[step - 'A']) + transpose.diatonic;
     if (idx < 0) {
         auto octave_change = -idx / 7 + 1;
@@ -538,19 +570,35 @@ inline int Pitch::midi_pitch(const Transpose& transpose) const {
 
 inline void Pitch::check_step() const {
     if (step < 'A' | step > 'G') {
-        throw std::runtime_error("MiniMx: Invalid step value in pitch (" + std::to_string(step) + ").");
+        throw std::runtime_error(
+            "MiniMx: Invalid step value in pitch (" + std::to_string(step) + ")."
+        );
     }
 }
 
 inline void Pitch::check_alter() const {
     if (alter < -2 | alter > 2) {
-        throw std::runtime_error("MiniMx: Invalid alter value in pitch (" + std::to_string(alter) + ").");
+        throw std::runtime_error(
+            "MiniMx: Invalid alter value in pitch (" + std::to_string(alter) + ")."
+        );
     }
 }
 
 inline void Pitch::check_octave() const {
     if (octave < 0 | octave > 9) {
-        throw std::runtime_error("MiniMx: Invalid octave value in pitch (" + std::to_string(octave) + ").");
+        throw std::runtime_error(
+            "MiniMx: Invalid octave value in pitch (" + std::to_string(octave) + ")."
+        );
+    }
+}
+
+inline Syllabic build_syllabic(const std::string& syllabic) {
+    switch (syllabic[0]) {
+    case 'b': return syllabic == "begin" ? Begin : None;
+    case 'e': return syllabic == "end" ? End : None;
+    case 'm': return syllabic == "middle" ? Middle : None;
+    case 's': return syllabic == "single" ? Single : None;
+    default: return None;
     }
 }
 
@@ -559,18 +607,7 @@ inline Lyric::Lyric(const pugi::xml_node doc) {
 
     const std::string syllabicText = node.select_node("syllabic").node().text().as_string();
     text                           = node.select_node("text").node().text().as_string();
-
-    if (syllabicText == "begin") {
-        syllabic = Begin;
-    } else if (syllabicText == "single") {
-        syllabic = Single;
-    } else if (syllabicText == "end") {
-        syllabic = End;
-    } else if (syllabicText == "middle") {
-        syllabic = Middle;
-    } else {
-        syllabic = None;
-    }
+    syllabic                       = build_syllabic(syllabicText);
 }
 
 inline Encoding::Encoding(const pugi::xml_node doc) {
@@ -606,22 +643,21 @@ inline Key::Key(const pugi::xml_node doc) {
     mode   = node.select_node("mode").node().text().as_string();
 }
 
+inline TimeSymbol build_time_symbol(const std::string& symbol) {
+    switch (symbol.size()) {
+    case 3: return symbol == "cut" ? TimeSymbol::Cut : TimeSymbol::Normal;
+    case 6: return symbol == "common" ? TimeSymbol::Common : TimeSymbol::Normal;
+    case 13: return symbol == "single-number" ? TimeSymbol::SingleNumber : TimeSymbol::Normal;
+    default: return TimeSymbol::Normal;
+    }
+}
+
 inline Time::Time(const pugi::xml_node doc) {
     const auto node = doc.select_node("time").node();
 
-    beats = node.select_node("beats").node().text().as_int();
-    beatType  = node.select_node("beat-type").node().text().as_int();
-
-    if (const std::string symbolString = node.attribute("symbol").as_string();
-        symbolString == "common") {
-        symbol = Common;
-    } else if (symbolString == "cut") {
-        symbol = Cut;
-    } else if (symbolString == "single-number") {
-        symbol = SingleNumber;
-    } else {
-        symbol = Normal;
-    }
+    beats    = node.select_node("beats").node().text().as_int();
+    beatType = node.select_node("beat-type").node().text().as_int();
+    symbol   = build_time_symbol(node.attribute("symbol").as_string());
 }
 
 inline Clef::Clef(const pugi::xml_node doc) {
@@ -634,17 +670,17 @@ inline Clef::Clef(const pugi::xml_node doc) {
 inline Transpose::Transpose(const pugi::xml_node doc) {
     const auto node = doc.select_node("transpose").node();
 
-    diatonic = node.select_node("diatonic").node().text().as_int();
-    chromatic = node.select_node("chromatic").node().text().as_int();
+    diatonic      = node.select_node("diatonic").node().text().as_int();
+    chromatic     = node.select_node("chromatic").node().text().as_int();
     octave_change = node.select_node("octave-change").node().text().as_int();
-    double_ = !node.select_node("double").node().empty();
+    double_       = !node.select_node("double").node().empty();
 }
 
 inline Sound::Sound(const pugi::xml_node doc) {
     const auto node = doc.select_node("sound").node();
 
-    tempo = node.attribute("tempo").as_double(-1.);
-    dynamics = node.attribute("dynamics").as_double(-1.);
+    tempo          = node.attribute("tempo").as_double(-1.);
+    dynamics       = node.attribute("dynamics").as_double(-1.);
     midiInstrument = MidiInstrument(node);
 }
 
@@ -652,14 +688,14 @@ inline MidiInstrument::MidiInstrument(const pugi::xml_node doc) {
     const auto node = doc.select_node("midi-instrument").node();
 
     program = node.select_node("midi-program").node().text().as_int(-1);
-    volume = node.select_node("volume").node().text().as_int(-1);
-    pan = node.select_node("pan").node().text().as_int(-1);
+    volume  = node.select_node("volume").node().text().as_int(-1);
+    pan     = node.select_node("pan").node().text().as_int(-1);
 }
 
 inline void Sound::update(const pugi::xml_node doc) {
     const auto node = doc.select_node("sound").node();
 
-    tempo = node.attribute("tempo").as_double(tempo);
+    tempo    = node.attribute("tempo").as_double(tempo);
     dynamics = node.attribute("dynamics").as_double(dynamics);
     midiInstrument.update(node);
 }
@@ -668,8 +704,8 @@ inline void MidiInstrument::update(const pugi::xml_node doc) {
     const auto node = doc.select_node("midi-instrument").node();
 
     program = node.select_node("midi-program").node().text().as_int(program);
-    volume = node.select_node("volume").node().text().as_int(volume);
-    pan = node.select_node("pan").node().text().as_int(pan);
+    volume  = node.select_node("volume").node().text().as_int(volume);
+    pan     = node.select_node("pan").node().text().as_int(pan);
 }
 
 }   // namespace minimx
