@@ -89,6 +89,21 @@ TEST_CASE("MusicXmlWithStaffValues", "minimx") {
         REQUIRE(part.staffNum == 2);
         REQUIRE(part.voiceNum == 5);
     }
+
+    SECTION("Tie") {
+        const auto& note1 = score.parts[1].measures[1].elements[0];
+        REQUIRE(note1.tie == Tie::StopStart);
+        const auto& note2 = score.parts[1].measures[1].elements[1];
+        REQUIRE(note2.tie == Tie::Stop);
+        const auto& note3 = score.parts[1].measures[0].elements[0];
+        REQUIRE(note3.tie == Tie::Start);
+        // Tie for Backup element is not defined
+        const auto& note4 = score.parts[1].measures[0].elements[1];
+        REQUIRE(note4.tie == Tie::NotDefined);
+        // Tie for a normal note is not tied
+        const auto& note5 = score.parts[0].measures[0].elements[0];
+        REQUIRE(note5.tie == Tie::NotTied);
+    }
 }
 
 TEST_CASE("MusicXmlWithoutMeasureWidthAttribute", "minimx") {
