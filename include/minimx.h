@@ -487,7 +487,6 @@ inline MeasureElement::MeasureElement(const pugi::xml_node node, const MeasureEl
                 time_modification.select_node("normal-notes").node().text().as_int()
             );
         }
-
     }
 }
 
@@ -538,6 +537,7 @@ inline Pitch::Pitch(const int midi_pitch) {
 }
 
 inline int Pitch::midi_pitch() const {
+    if (step == '\0') { return -1; }
     constexpr uint8_t step_map[] = {9, 11, 0, 2, 4, 5, 7};
     const int         pitch      = static_cast<int>(octave + 1) * 12 + step_map[step - 'A'] + alter;
     if (pitch < 0 | pitch > 127) {
@@ -547,24 +547,31 @@ inline int Pitch::midi_pitch() const {
 }
 
 inline int Pitch::midi_pitch(const Transpose& transpose) const {
-    constexpr int8_t step2idx[]  = {5, 6, 0, 1, 2, 3, 4};
-    constexpr int8_t idx2value[] = {0, 2, 4, 5, 7, 9, 11};
-    int              pitch
-        = static_cast<int>(octave + 1 + transpose.octave_change + (transpose.double_ ? -1 : 0))
-          * 12;
+    if (step == '\0') { return -1; }
+
+    constexpr std::array<int8_t, 7> step2idx{5, 6, 0, 1, 2, 3, 4};
+    constexpr std::array<int8_t, 8> idx2value{0, 2, 4, 5, 7, 9, 11, -1};
+
+    int true_octave = static_cast<int>(octave) + 1;
+    true_octave += transpose.octave_change;
+    true_octave += transpose.double_ ? -1 : 0;
+
+    int pitch = true_octave * 12;
+
     int idx = static_cast<int>(step2idx[step - 'A']) + transpose.diatonic;
+
     if (idx < 0) {
-        auto octave_change = -idx / 7 + 1;
+        const int octave_change = -idx / 7 + 1;
         pitch -= octave_change * 12;
         idx += octave_change * 7;
     } else if (idx > 6) {
-        auto octave_change = idx / 7;
+        const int octave_change = idx / 7;
         pitch += octave_change * 12;
         idx -= octave_change * 7;
     }
 
     pitch += idx2value[idx];
-    pitch += alter + transpose.chromatic;
+    pitch += static_cast<int>(alter) + transpose.chromatic;
     return pitch;
 }
 
