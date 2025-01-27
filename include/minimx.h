@@ -237,7 +237,7 @@ struct MeasureElement {
     uint8_t            staff{};             // The staff number, which indicates higher or lower notes.
     uint8_t            actualNotes{1};      // The actual_notes in time_modification.
     uint8_t            normalNotes{1};      // The normal_notes in time_modification.
-    int                voice{};             // The voice number.
+    uint8_t            voice{};             // The voice number.
     int                duration{};          // The duration of the element.
     Pitch              pitch{};             // The pitch information for a note.
     Lyric              lyric{};             // The lyric associated with the note.
@@ -275,6 +275,8 @@ struct Part {
     std::string          id;         // An identifier for the part.
     std::string          name;       // The name of the part (e.g., "Piano").
     MidiInstrument midiInstrument;  // The midi instrument of the part.
+    uint8_t staffNum = 1;  // The number of staffs in the part.
+    uint8_t voiceNum = 1;  // The number of voices in the part.
     std::vector<Measure> measures;   // A list of measures belonging to this part.
 
     Part()                       = default;
@@ -381,7 +383,13 @@ inline Part::Part(const pugi::xml_node node) {
     const auto        measureNodes = node.select_nodes(xpath.c_str());
     measures.reserve(measureNodes.size());
 
-    for (const auto& measureNode : measureNodes) { measures.emplace_back(measureNode.node()); }
+    for (const auto& measureNode : measureNodes) {
+        measures.emplace_back(measureNode.node());
+        for (const auto &element : measures.back().elements) {
+            staffNum = std::max(staffNum, element.staff);
+            voiceNum = std::max(voiceNum, element.voice);
+        }
+    }
 }
 
 inline Measure::Measure(const pugi::xml_node node) {

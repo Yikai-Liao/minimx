@@ -83,6 +83,12 @@ TEST_CASE("MusicXmlWithStaffValues", "minimx") {
         REQUIRE(element.type == Forward);
         REQUIRE(element.duration == 8);
     }
+
+    SECTION("Staff") {
+        const auto &part = score.parts[1];
+        REQUIRE(part.staffNum == 2);
+        REQUIRE(part.voiceNum == 5);
+    }
 }
 
 TEST_CASE("MusicXmlWithoutMeasureWidthAttribute", "minimx") {
