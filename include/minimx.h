@@ -10,7 +10,9 @@
 #include <cstring>
 #include <cstdint>
 #include <vector>
+#include <array>
 #include <iostream>
+#include <unordered_map>
 
 namespace minimx {
 
@@ -297,6 +299,7 @@ struct Part {
     Part& operator=(Part&&)      = default;
 
     explicit Part(pugi::xml_node node);
+    Part(pugi::xml_node attr_node, pugi::xml_node data_node);
 };
 
 /// @brief Represents encoding information about the MusicXML file.
@@ -371,11 +374,23 @@ inline MXScore::MXScore(const pugi::xml_document& doc) {
 }
 
 inline void MXScore::parse_part_wise(const pugi::xml_node node) {
-    movementTitle        = node.select_node("movement-title").node().text().as_string();
+    movementTitle        = node.child("movement-title").text().as_string();
     identification       = Identification(node);
-    const auto partNodes = node.select_nodes("part-list/score-part");
-    parts.reserve(partNodes.size());
-    for (const auto& partNode : partNodes) { parts.emplace_back(partNode.node()); }
+
+    std::unordered_map<std::string, pugi::xml_node> partAttrMap;
+    for (const auto partNode : node.child("part-list").children("score-part")) {
+        partAttrMap[partNode.attribute("id").as_string()] = partNode;
+    }
+
+    const auto nodeSet = node.children("part");
+    const auto size   = std::distance(nodeSet.begin(), nodeSet.end());
+    parts.reserve(size);
+
+    for (const auto& partNode : nodeSet) {
+        const auto attrNode = partAttrMap.at(partNode.attribute("id").as_string());
+        parts.emplace_back(attrNode, partNode);
+
+    }
 }
 
 inline void MXScore::parse_time_wise(const pugi::xml_node node) {
@@ -383,10 +398,9 @@ inline void MXScore::parse_time_wise(const pugi::xml_node node) {
     throw std::runtime_error("Time-wise parsing is not implemented yet.");
 }
 
-
 inline Part::Part(const pugi::xml_node node) {
     id             = node.attribute("id").as_string();
-    name           = node.select_node("part-name").node().text().as_string();
+    name           = node.child("part-name").text().as_string();
     midiInstrument = MidiInstrument(node);
 
     const std::string xpath        = "//part[@id='" + id + "']/measure";
@@ -402,21 +416,42 @@ inline Part::Part(const pugi::xml_node node) {
     }
 }
 
+inline Part::Part(const pugi::xml_node attr_node, const pugi::xml_node data_node) {
+    id             = attr_node.attribute("id").as_string();
+    name           = attr_node.child("part-name").text().as_string();
+    midiInstrument = MidiInstrument(attr_node);
+
+    const auto nodeSet = data_node.children("measure");
+    const auto size   = std::distance(nodeSet.begin(), nodeSet.end());
+    measures.reserve(size);
+
+    for (const auto& measureNode : nodeSet) {
+        measures.emplace_back(measureNode);
+        for (const auto& element : measures.back().elements) {
+            staffNum = std::max(staffNum, element.staff);
+            voiceNum = std::max(voiceNum, element.voice);
+        }
+    }
+}
+
 inline Measure::Measure(const pugi::xml_node node) {
     width      = node.attribute("width").as_double(-1.);
     attributes = MeasureAttributes(node);
     sound      = Sound(node);
 
-    for (const auto direction : node.select_nodes("direction")) { sound.update(direction.node()); }
-
     elements.reserve(16);   // pre allocate space for 16 elements, to fasten the process
-    for (const auto& child : node.children()) {
+    const auto nodeSet = node.children();
+    const auto size   = std::distance(nodeSet.begin(), nodeSet.end());
+    elements.reserve(size);
+    for (const auto& child : nodeSet) {
         if (const std::string name = child.name(); name == "note") {
             elements.emplace_back(child, MeasureElementType::Note);
         } else if (name == "backup") {
             elements.emplace_back(child, MeasureElementType::Backup);
         } else if (name == "forward") {
             elements.emplace_back(child, MeasureElementType::Forward);
+        } else if (name == "direction") {
+            sound.update(child);
         }
     }
 }
@@ -434,21 +469,49 @@ inline MeasureElementType build_measure_element_type(const std::string& type) {
 }
 
 inline Tie build_tie(const pugi::xml_node doc) {
-    switch (const auto nodes = doc.select_nodes("tie"); nodes.size()) {
-    case 0: return Tie::NotTied;
-    case 1: {
-        if (const std::string tieType = nodes[0].node().attribute("type").as_string();
-            tieType == "start") {
+    // switch (const auto nodes = doc.select_nodes("tie"); nodes.size()) {
+    // case 0: return Tie::NotTied;
+    // case 1: {
+    //     if (const std::string tieType = nodes[0].node().attribute("type").as_string();
+    //         tieType == "start") {
+    //         return Tie::Start;
+    //     } else if (tieType == "stop") {
+    //         return Tie::Stop;
+    //     } else {
+    //         throw std::runtime_error("MiniMx: Invalid tie type (" + tieType + ").");
+    //     }
+    // }
+    // case 2: {
+    //     const std::string tieType1 = nodes[0].node().attribute("type").as_string();
+    //     const std::string tieType2 = nodes[1].node().attribute("type").as_string();
+    //     if (tieType1 == "stop" & tieType2 == "start") {
+    //         return Tie::StopStart;
+    //     } else {
+    //         throw std::runtime_error(
+    //             "MiniMx: Invalid tie type (" + tieType1 + ", " + tieType2 + ")."
+    //         );
+    //     }
+    // }
+    // default: {
+    //     throw std::runtime_error("MiniMx: Invalid tie type.");
+    // }
+    // }
+    auto nodeSet = doc.children("tie");
+    const auto size = std::distance(nodeSet.begin(), nodeSet.end());
+    if (size == 0) {
+        return Tie::NotTied;
+    } else if (size == 1) {
+        const std::string tieType = nodeSet.begin()->attribute("type").as_string();
+        if (tieType == "start") {
             return Tie::Start;
         } else if (tieType == "stop") {
             return Tie::Stop;
         } else {
             throw std::runtime_error("MiniMx: Invalid tie type (" + tieType + ").");
         }
-    }
-    case 2: {
-        const std::string tieType1 = nodes[0].node().attribute("type").as_string();
-        const std::string tieType2 = nodes[1].node().attribute("type").as_string();
+    } else if (size == 2) {
+        const std::string tieType1 = nodeSet.begin()->attribute("type").as_string();
+        const std::string tieType2 = (++nodeSet.begin())->attribute("type").as_string();
         if (tieType1 == "stop" & tieType2 == "start") {
             return Tie::StopStart;
         } else {
@@ -456,10 +519,8 @@ inline Tie build_tie(const pugi::xml_node doc) {
                 "MiniMx: Invalid tie type (" + tieType1 + ", " + tieType2 + ")."
             );
         }
-    }
-    default: {
+    } else {
         throw std::runtime_error("MiniMx: Invalid tie type.");
-    }
     }
 }
 
@@ -468,23 +529,23 @@ inline MeasureElement::MeasureElement(const pugi::xml_node node) :
     MeasureElement(node, build_measure_element_type(node.name())) {}
 
 inline MeasureElement::MeasureElement(const pugi::xml_node node, const MeasureElementType type) :
-    type(type), duration(node.select_node("duration").node().text().as_int()) {
+    type(type), duration(node.child("duration").text().as_int()) {
     if (type == MeasureElementType::Note) {
         tie         = build_tie(node);
-        voice       = node.select_node("voice").node().text().as_int();
-        staff       = node.select_node("staff").node().text().as_int();
+        voice       = node.child("voice").text().as_int();
+        staff       = node.child("staff").text().as_int();
         isChordTone = node.child("chord") ? true : false;
         isGrace     = node.child("grace") ? true : false;
         isRest      = node.child("rest") ? true : false;
         pitch       = isRest ? Pitch() : Pitch(node);
         lyric       = Lyric(node);
 
-        if (const auto time_modification = node.select_node("time-modification").node()) {
+        if (const auto time_modification = node.child("time-modification")) {
             actualNotes = static_cast<uint8_t>(
-                time_modification.select_node("actual-notes").node().text().as_int()
+                time_modification.child("actual-notes").text().as_int()
             );
             normalNotes = static_cast<uint8_t>(
-                time_modification.select_node("normal-notes").node().text().as_int()
+                time_modification.child("normal-notes").text().as_int()
             );
         }
     }
@@ -492,11 +553,11 @@ inline MeasureElement::MeasureElement(const pugi::xml_node node, const MeasureEl
 
 
 inline Pitch::Pitch(const pugi::xml_node doc) {
-    const auto node = doc.select_node("pitch").node();
+    const auto node = doc.child("pitch");
 
-    step   = node.select_node("step").node().text().as_string("\0")[0];
-    alter  = static_cast<int8_t>(node.select_node("alter").node().text().as_int());
-    octave = static_cast<int8_t>(node.select_node("octave").node().text().as_int());
+    step   = node.child("step").text().as_string("\0")[0];
+    alter  = static_cast<int8_t>(node.child("alter").text().as_int());
+    octave = static_cast<int8_t>(node.child("octave").text().as_int());
 
     check_step();
     check_alter();
@@ -610,15 +671,15 @@ inline Syllabic build_syllabic(const std::string& syllabic) {
 }
 
 inline Lyric::Lyric(const pugi::xml_node doc) {
-    const auto node = doc.select_node("lyric").node();
+    const auto node = doc.child("lyric");
 
-    const std::string syllabicText = node.select_node("syllabic").node().text().as_string();
-    text                           = node.select_node("text").node().text().as_string();
+    const std::string syllabicText = node.child("syllabic").text().as_string();
+    text                           = node.child("text").text().as_string();
     syllabic                       = build_syllabic(syllabicText);
 }
 
 inline Encoding::Encoding(const pugi::xml_node doc) {
-    const auto node = doc.select_node("encoding").node();
+    const auto node = doc.child("encoding");
 
     software    = getInnerText(node, "software");
     description = getInnerText(node, "encoding-description");
@@ -626,17 +687,17 @@ inline Encoding::Encoding(const pugi::xml_node doc) {
 }
 
 inline Identification::Identification(const pugi::xml_node doc) {
-    const auto node = doc.select_node("identification").node();
+    const auto node = doc.child("identification");
 
-    composer = node.select_node("creator[@type='composer']").node().text().as_string();
-    rights   = node.select_node("rights").node().text().as_string();
+    composer = node.child("creator[@type='composer']").text().as_string();
+    rights   = node.child("rights").text().as_string();
     encoding = Encoding(node);
 }
 
 inline MeasureAttributes::MeasureAttributes(const pugi::xml_node doc) {
-    const auto node = doc.select_node("attributes").node();
+    const auto node = doc.child("attributes");
 
-    divisions = node.select_node("divisions").node().text().as_int();
+    divisions = node.child("divisions").text().as_int();
     key       = Key(node);
     time      = Time(node);
     clef      = Clef(node);
@@ -644,10 +705,10 @@ inline MeasureAttributes::MeasureAttributes(const pugi::xml_node doc) {
 }
 
 inline Key::Key(const pugi::xml_node doc) {
-    const auto node = doc.select_node("key").node();
+    const auto node = doc.child("key");
 
-    fifths = node.select_node("fifths").node().text().as_int();
-    mode   = node.select_node("mode").node().text().as_string();
+    fifths = node.child("fifths").text().as_int();
+    mode   = node.child("mode").text().as_string();
 }
 
 inline TimeSymbol build_time_symbol(const std::string& symbol) {
@@ -660,31 +721,31 @@ inline TimeSymbol build_time_symbol(const std::string& symbol) {
 }
 
 inline Time::Time(const pugi::xml_node doc) {
-    const auto node = doc.select_node("time").node();
+    const auto node = doc.child("time");
 
-    beats    = node.select_node("beats").node().text().as_int();
-    beatType = node.select_node("beat-type").node().text().as_int();
+    beats    = node.child("beats").text().as_int();
+    beatType = node.child("beat-type").text().as_int();
     symbol   = build_time_symbol(node.attribute("symbol").as_string());
 }
 
 inline Clef::Clef(const pugi::xml_node doc) {
-    const auto node = doc.select_node("clef").node();
+    const auto node = doc.child("clef");
 
-    line = node.select_node("line").node().text().as_int();
-    sign = node.select_node("sign").node().text().as_string();
+    line = node.child("line").text().as_int();
+    sign = node.child("sign").text().as_string();
 }
 
 inline Transpose::Transpose(const pugi::xml_node doc) {
-    const auto node = doc.select_node("transpose").node();
+    const auto node = doc.child("transpose");
 
-    diatonic      = node.select_node("diatonic").node().text().as_int();
-    chromatic     = node.select_node("chromatic").node().text().as_int();
-    octave_change = node.select_node("octave-change").node().text().as_int();
-    double_       = !node.select_node("double").node().empty();
+    diatonic      = node.child("diatonic").text().as_int();
+    chromatic     = node.child("chromatic").text().as_int();
+    octave_change = node.child("octave-change").text().as_int();
+    double_       = !node.child("double").empty();
 }
 
 inline Sound::Sound(const pugi::xml_node doc) {
-    const auto node = doc.select_node("sound").node();
+    const auto node = doc.child("sound");
 
     tempo          = node.attribute("tempo").as_double(-1.);
     dynamics       = node.attribute("dynamics").as_double(-1.);
@@ -692,15 +753,15 @@ inline Sound::Sound(const pugi::xml_node doc) {
 }
 
 inline MidiInstrument::MidiInstrument(const pugi::xml_node doc) {
-    const auto node = doc.select_node("midi-instrument").node();
+    const auto node = doc.child("midi-instrument");
 
-    program = node.select_node("midi-program").node().text().as_int(-1);
-    volume  = node.select_node("volume").node().text().as_int(-1);
-    pan     = node.select_node("pan").node().text().as_int(-1);
+    program = node.child("midi-program").text().as_int(-1);
+    volume  = node.child("volume").text().as_int(-1);
+    pan     = node.child("pan").text().as_int(-1);
 }
 
 inline void Sound::update(const pugi::xml_node doc) {
-    const auto node = doc.select_node("sound").node();
+    const auto node = doc.child("sound");
 
     tempo    = node.attribute("tempo").as_double(tempo);
     dynamics = node.attribute("dynamics").as_double(dynamics);
@@ -708,11 +769,11 @@ inline void Sound::update(const pugi::xml_node doc) {
 }
 
 inline void MidiInstrument::update(const pugi::xml_node doc) {
-    const auto node = doc.select_node("midi-instrument").node();
+    const auto node = doc.child("midi-instrument");
 
-    program = node.select_node("midi-program").node().text().as_int(program);
-    volume  = node.select_node("volume").node().text().as_int(volume);
-    pan     = node.select_node("pan").node().text().as_int(pan);
+    program = node.child("midi-program").text().as_int(program);
+    volume  = node.child("volume").text().as_int(volume);
+    pan     = node.child("pan").text().as_int(pan);
 }
 
 }   // namespace minimx
